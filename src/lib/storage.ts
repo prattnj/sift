@@ -4,6 +4,16 @@ const K_CATEGORIES = 'sift.categories'
 const K_MAPPINGS = 'sift.mappings'
 const K_SESSION = 'sift.session'
 
+// Special reserved category. Ignored transactions are still categorized and tracked,
+// but excluded from all summary/running totals (e.g. credit-card payments, transfers).
+// It is injected at runtime — never stored in the user's editable category list.
+export const IGNORED_CATEGORY_ID = '__ignored__'
+export const IGNORED_CATEGORY: Category = {
+  id: IGNORED_CATEGORY_ID,
+  name: 'Ignored',
+  color: '#64748b',
+}
+
 function hslToHex(h: number, s: number, l: number): string {
   const a = s * Math.min(l, 1 - l)
   const f = (n: number) => {

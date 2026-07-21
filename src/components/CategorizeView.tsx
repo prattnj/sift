@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Category, Transaction } from '../types'
 import { fmtUSD } from '../lib/format'
+import { IGNORED_CATEGORY, IGNORED_CATEGORY_ID } from '../lib/storage'
 
 interface Props {
   transactions: Transaction[]
@@ -30,7 +31,10 @@ export default function CategorizeView({
   onFinish,
 }: Props) {
   const current = transactions[index]
-  const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+  const catById = useMemo(
+    () => new Map([...categories, IGNORED_CATEGORY].map((c) => [c.id, c])),
+    [categories],
+  )
 
   // Whether assigning should also save the merchant→category mapping. Defaults to true,
   // but resets to true for each transaction so a one-off opt-out doesn't stick.
@@ -47,6 +51,7 @@ export default function CategorizeView({
     const map = new Map<string, Totals>()
     for (const t of transactions) {
       if (!t.categoryId) continue
+      if (t.categoryId === IGNORED_CATEGORY_ID) continue // excluded from totals
       const cur = map.get(t.categoryId) ?? { debit: 0, credit: 0, count: 0 }
       if (t.type === 'debit') cur.debit += t.amount
       else cur.credit += t.amount
@@ -56,13 +61,22 @@ export default function CategorizeView({
     return map
   }, [transactions])
 
-  // Keyboard shortcuts: 1-9 assign category, arrows navigate.
+  const ignoredCount = useMemo(
+    () => transactions.filter((t) => t.categoryId === IGNORED_CATEGORY_ID).length,
+    [transactions],
+  )
+
+  const isIgnored = current?.categoryId === IGNORED_CATEGORY_ID
+
+  // Keyboard shortcuts: 1-9 assign category, 0 ignore, arrows navigate.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
       if (e.key >= '1' && e.key <= '9') {
         const i = Number(e.key) - 1
         if (categories[i]) onAssign(categories[i].id, remember)
+      } else if (e.key === '0') {
+        onAssign(IGNORED_CATEGORY_ID, remember)
       } else if (e.key === 'ArrowRight') {
         onNavigate(Math.min(index + 1, transactions.length - 1))
       } else if (e.key === 'ArrowLeft') {
@@ -141,7 +155,32 @@ export default function CategorizeView({
               })}
             </div>
 
-            {/* Remember mapping toggle */}
+            {/* Ignore — special category excluded from summary totals */}
+            <button
+              onClick={() => onAssign(IGNORED_CATEGORY_ID, remember)}
+              className={`group mt-3 flex w-full items-center gap-2 rounded-xl border px-3 py-3 text-left text-sm transition-all ${
+                isIgnored
+                  ? 'border-slate-500 bg-ink-700 text-white'
+                  : 'border-dashed border-ink-600 bg-ink-850 text-slate-400 hover:border-slate-500 hover:bg-ink-800'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                <path
+                  d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.4 5.1A9.5 9.5 0 0112 5c5 0 9 4 10 7a12 12 0 01-2.2 3.2M6.6 6.6C3.9 8 2.2 10.2 2 12c1 3 5 7 10 7 1.4 0 2.7-.3 3.9-.8"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="flex-1">
+                Ignore this transaction
+                <span className="ml-1 text-xs text-slate-500">(excluded from totals)</span>
+              </span>
+              <kbd className="rounded bg-ink-900 px-1.5 py-0.5 text-[10px] text-slate-500 group-hover:text-slate-400">
+                0
+              </kbd>
+            </button>
             <label className="mt-3 flex cursor-pointer select-none items-center gap-2.5 text-sm">
               <button
                 type="button"
@@ -231,6 +270,15 @@ export default function CategorizeView({
                 <p className="py-4 text-center text-sm text-slate-600">Nothing categorized yet.</p>
               )}
             </div>
+            {ignoredCount > 0 && (
+              <div className="mt-2 flex items-center gap-2 border-t border-ink-700 px-2 pt-2 text-xs text-slate-500">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: IGNORED_CATEGORY.color }} />
+                <span className="flex-1">Ignored</span>
+                <span>
+                  {ignoredCount} txn{ignoredCount === 1 ? '' : 's'} · excluded
+                </span>
+              </div>
+            )}
           </div>
         </aside>
       </div>

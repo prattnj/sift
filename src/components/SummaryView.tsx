@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Category, Transaction } from '../types'
 import { fmtUSD, fmtUSDPlain } from '../lib/format'
+import { IGNORED_CATEGORY, IGNORED_CATEGORY_ID } from '../lib/storage'
 
 interface Props {
   transactions: Transaction[]
@@ -19,14 +20,21 @@ interface Row {
 export default function SummaryView({ transactions, categories, onBack, onStartOver }: Props) {
   const [copied, setCopied] = useState<'debit' | 'full' | null>(null)
 
-  const { rows, totalDebit, totalCredit, uncategorized } = useMemo(() => {
+  const { rows, totalDebit, totalCredit, uncategorized, ignoredCount, ignoredAmount } = useMemo(() => {
     const map = new Map<string, Row>()
     let totalDebit = 0
     let totalCredit = 0
     let uncategorized = 0
+    let ignoredCount = 0
+    let ignoredAmount = 0
     for (const t of transactions) {
       if (!t.categoryId) {
         uncategorized++
+        continue
+      }
+      if (t.categoryId === IGNORED_CATEGORY_ID) {
+        ignoredCount++
+        ignoredAmount += t.amount
         continue
       }
       const cat = categories.find((c) => c.id === t.categoryId)
@@ -43,7 +51,7 @@ export default function SummaryView({ transactions, categories, onBack, onStartO
       map.set(cat.id, row)
     }
     const rows = [...map.values()].sort((a, b) => b.debit - a.debit)
-    return { rows, totalDebit, totalCredit, uncategorized }
+    return { rows, totalDebit, totalCredit, uncategorized, ignoredCount, ignoredAmount }
   }, [transactions, categories])
 
   const copy = (mode: 'debit' | 'full') => {
@@ -67,6 +75,9 @@ export default function SummaryView({ transactions, categories, onBack, onStartO
             {transactions.length} transactions · {rows.length} categories
             {uncategorized > 0 && (
               <span className="text-amber-400"> · {uncategorized} uncategorized</span>
+            )}
+            {ignoredCount > 0 && (
+              <span className="text-slate-500"> · {ignoredCount} ignored</span>
             )}
           </p>
         </div>
@@ -136,6 +147,15 @@ export default function SummaryView({ transactions, categories, onBack, onStartO
           )}
         </table>
       </div>
+
+      {ignoredCount > 0 && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-dashed border-ink-700 bg-ink-900/40 px-4 py-3 text-sm">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: IGNORED_CATEGORY.color }} />
+          <span className="text-slate-400">Ignored</span>
+          <span className="text-slate-600">— {ignoredCount} txn{ignoredCount === 1 ? '' : 's'}, {fmtUSD(ignoredAmount)}</span>
+          <span className="ml-auto text-xs italic text-slate-600">excluded from totals</span>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="mt-6 flex flex-wrap gap-3">
