@@ -17,6 +17,13 @@ import CategoryManager from './components/CategoryManager'
 
 type View = 'upload' | 'categorize' | 'summary'
 
+/** Next index (searching forward, then wrapping) whose transaction still needs a category. */
+function nextUnknownIndex(txns: Transaction[], from: number): number {
+  for (let i = from; i < txns.length; i++) if (!txns[i].categoryId) return i
+  for (let i = 0; i < from && i < txns.length; i++) if (!txns[i].categoryId) return i
+  return Math.min(Math.max(from - 1, 0), txns.length - 1) // all categorized
+}
+
 export default function App() {
   const [categories, setCategories] = useState<Category[]>(() => loadCategories())
   const [mappings, setMappings] = useState<MappingStore>(() => loadMappings())
@@ -47,14 +54,16 @@ export default function App() {
 
   const handleLoaded = useCallback(
     (txns: Transaction[], name: string) => {
-      // Apply learned auto-suggestions up front.
+      // Apply learned auto-suggestions up front (scoped per card).
       const suggested = txns.map((t) => {
-        const match = findBestMatch(t.merchantKey, mappings)
+        const match = findBestMatch(t.card, t.merchantKey, mappings)
         return match ? { ...t, categoryId: match.categoryId, autoSuggested: true } : t
       })
       setTransactions(suggested)
       setFileName(name)
-      setIndex(0)
+      // Skip straight to the first transaction that still needs a category.
+      const firstUnknown = suggested.findIndex((t) => !t.categoryId)
+      setIndex(firstUnknown === -1 ? 0 : firstUnknown)
       setView('categorize')
       setRestored(null)
     },
@@ -74,27 +83,26 @@ export default function App() {
     (categoryId: string, remember = true) => {
       const cur = transactions[index]
       if (!cur) return
-      // Reinforce the learned mapping for this merchant (unless the user opted out).
-      const updated = remember ? learnMapping(mappings, cur.merchantKey, categoryId) : mappings
+      // Reinforce the learned mapping for this merchant on this card (unless opted out).
+      const updated = remember
+        ? learnMapping(mappings, cur.card, cur.merchantKey, categoryId)
+        : mappings
       if (remember) setMappings(updated)
 
-      setTransactions((prev) => {
-        const target = prev[index]
-        if (!target) return prev
-        return prev.map((t, i) => {
-          if (i === index) return { ...t, categoryId, autoSuggested: false }
-          // Propagate the fresh knowledge to any still-uncategorized transactions
-          // (e.g. an identical merchant later in this same file).
-          if (!t.categoryId) {
-            const match = findBestMatch(t.merchantKey, updated)
-            if (match) return { ...t, categoryId: match.categoryId, autoSuggested: true }
-          }
-          return t
-        })
+      const nextTxns = transactions.map((t, i) => {
+        if (i === index) return { ...t, categoryId, autoSuggested: false }
+        // Propagate the fresh knowledge to any still-uncategorized transactions
+        // (e.g. an identical merchant later in this same file, same card).
+        if (!t.categoryId) {
+          const match = findBestMatch(t.card, t.merchantKey, updated)
+          if (match) return { ...t, categoryId: match.categoryId, autoSuggested: true }
+        }
+        return t
       })
+      setTransactions(nextTxns)
 
-      // Advance to the next transaction.
-      setIndex((i) => Math.min(i + 1, transactions.length - 1))
+      // Advance to the next transaction that still needs a category (auto-skip known ones).
+      setIndex(nextUnknownIndex(nextTxns, index + 1))
     },
     [index, transactions, mappings],
   )
@@ -108,6 +116,18 @@ export default function App() {
       return next
     })
   }, [index])
+
+  const recategorize = useCallback(
+    (txnId: string, categoryId: string) => {
+      const t = transactions.find((x) => x.id === txnId)
+      setTransactions((prev) =>
+        prev.map((x) => (x.id === txnId ? { ...x, categoryId, autoSuggested: false } : x)),
+      )
+      // Correcting a category from the summary also updates the remembered mapping.
+      if (t) setMappings(learnMapping(mappings, t.card, t.merchantKey, categoryId))
+    },
+    [transactions, mappings],
+  )
 
   const deleteCategory = useCallback(
     (id: string) => {
@@ -157,6 +177,7 @@ export default function App() {
           <SummaryView
             transactions={transactions}
             categories={categories}
+            onRecategorize={recategorize}
             onBack={() => setView('categorize')}
             onStartOver={startOver}
           />

@@ -1,4 +1,4 @@
-import type { Transaction } from '../types'
+import type { CardType, Transaction } from '../types'
 import { cleanMerchantName, merchantKey } from './normalize'
 
 /** Parse a single CSV line into fields, honoring double-quoted fields with embedded commas. */
@@ -32,7 +32,7 @@ function parseCsvLine(line: string): string[] {
   return fields.map((f) => f.trim())
 }
 
-const HEADER_ALIASES: Record<string, keyof HeaderMap> = {
+const HEADER_ALIASES: Record<string, Exclude<keyof HeaderMap, 'card'>> = {
   'transaction number': 'transactionNumber',
   date: 'date',
   description: 'description',
@@ -52,20 +52,29 @@ interface HeaderMap {
   amountCredit: number
   balance: number
   checkNumber: number
+  card: CardType
 }
 
 const REQUIRED: (keyof HeaderMap)[] = ['date', 'memo', 'amountDebit', 'amountCredit']
 
+// Columns unique to the credit-card export format. Their presence marks a credit-card file.
+const CREDIT_CARD_MARKERS = ['fees', 'principal', 'interest']
+
 /** Detect whether a parsed row is the header row and, if so, build a column map. */
 function tryBuildHeaderMap(fields: string[]): HeaderMap | null {
   const map: Partial<HeaderMap> = {}
+  let creditMarkers = 0
   fields.forEach((f, idx) => {
-    const key = HEADER_ALIASES[f.toLowerCase().trim()]
+    const normalized = f.toLowerCase().trim()
+    const key = HEADER_ALIASES[normalized]
     if (key !== undefined && map[key] === undefined) map[key] = idx
+    if (CREDIT_CARD_MARKERS.includes(normalized)) creditMarkers++
   })
   for (const r of REQUIRED) {
+    if (r === 'card') continue
     if (map[r] === undefined) return null
   }
+  map.card = creditMarkers > 0 ? 'credit' : 'debit'
   return map as HeaderMap
 }
 
@@ -155,6 +164,7 @@ export function parseCsv(text: string): ParseResult {
       merchantKey: merchantKey(memo),
       amount,
       type,
+      card: header.card,
       balance: Number.isNaN(balance) ? null : balance,
       checkNumber: get(header.checkNumber),
       categoryId: null,

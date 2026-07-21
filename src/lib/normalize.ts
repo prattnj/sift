@@ -1,4 +1,4 @@
-import type { MappingStore } from '../types'
+import type { CardType, MappingStore } from '../types'
 
 // Tokens/patterns that are transaction-specific noise, not part of the merchant identity.
 const DATE_CUT = /\bdate\b/i // everything from a "Date ..." marker onward is noise
@@ -101,16 +101,18 @@ export interface MatchResult {
 const MATCH_THRESHOLD = 0.82
 
 /**
- * Find the best learned category for a merchant key.
- * Exact key match wins; otherwise fuzzy-match against known keys above a threshold.
+ * Find the best learned category for a merchant key on a specific card.
+ * Matching is scoped to the same card: exact key match wins; otherwise fuzzy-match
+ * against known keys for that card above a threshold.
  */
-export function findBestMatch(key: string, store: MappingStore): MatchResult | null {
+export function findBestMatch(card: CardType, key: string, store: MappingStore): MatchResult | null {
   if (!key) return null
-  const exact = store[key]
+  const exact = store[`${card}::${key}`]
   if (exact) return { categoryId: exact.categoryId, confidence: 1, matchedKey: key }
 
   let best: MatchResult | null = null
   for (const m of Object.values(store)) {
+    if (m.card !== card) continue
     const score = similarity(key, m.merchantKey)
     if (score >= MATCH_THRESHOLD && (!best || score > best.confidence)) {
       best = { categoryId: m.categoryId, confidence: score, matchedKey: m.merchantKey }

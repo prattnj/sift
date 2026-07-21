@@ -109,7 +109,7 @@ export default function CategorizeView({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         {/* Main */}
-        <div>
+        <div className="min-w-0">
           <TransactionCard current={current} category={current.categoryId ? catById.get(current.categoryId) : undefined} />
 
           {/* Category chips */}
@@ -294,12 +294,12 @@ function TransactionCard({ current, category }: { current: Transaction; category
           <div className="flex items-center gap-2">
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                current.type === 'debit'
-                  ? 'bg-red-500/15 text-red-300'
-                  : 'bg-emerald-500/15 text-emerald-300'
+                current.card === 'credit'
+                  ? 'bg-violet-500/15 text-violet-300'
+                  : 'bg-sky-500/15 text-sky-300'
               }`}
             >
-              {current.type}
+              {current.card === 'credit' ? 'Credit Card' : 'Debit Card'}
             </span>
             <span className="text-xs text-slate-500">{current.date}</span>
             {current.autoSuggested && current.categoryId && (

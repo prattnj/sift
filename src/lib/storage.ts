@@ -1,4 +1,4 @@
-import type { Category, MappingStore, Transaction } from '../types'
+import type { CardType, Category, MappingStore, Transaction } from '../types'
 
 const K_CATEGORIES = 'sift.categories'
 const K_MAPPINGS = 'sift.mappings'
@@ -94,14 +94,26 @@ export function saveMappings(store: MappingStore): void {
   write(K_MAPPINGS, store)
 }
 
-/** Record (or reinforce) that a merchant key belongs to a category. */
-export function learnMapping(store: MappingStore, key: string, categoryId: string): MappingStore {
+/** Composite localStorage key so mappings are scoped to a specific card. */
+export function mappingKey(card: CardType, merchantKey: string): string {
+  return `${card}::${merchantKey}`
+}
+
+/** Record (or reinforce) that a merchant key on a given card belongs to a category. */
+export function learnMapping(
+  store: MappingStore,
+  card: CardType,
+  key: string,
+  categoryId: string,
+): MappingStore {
   if (!key) return store
-  const prev = store[key]
+  const composite = mappingKey(card, key)
+  const prev = store[composite]
   const next: MappingStore = {
     ...store,
-    [key]: {
+    [composite]: {
       merchantKey: key,
+      card,
       categoryId,
       count: prev && prev.categoryId === categoryId ? prev.count + 1 : 1,
       updatedAt: Date.now(),
