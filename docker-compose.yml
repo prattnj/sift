@@ -1,0 +1,7 @@
+services:
+  sift:
+    build: .
+    container_name: sift
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PORT_SIFT:?Port environment variable must be set}:3000"
