@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import type { Category, Transaction } from '../types'
 import { fmtUSD, fmtUSDPlain } from '../lib/format'
+import { CARD_META } from '../lib/cards'
 import { IGNORED_CATEGORY, IGNORED_CATEGORY_ID } from '../lib/storage'
 
 interface Props {
@@ -272,10 +273,10 @@ function TxnRow({
     <div className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-ink-800/60">
       <span
         className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
-          txn.card === 'credit' ? 'bg-violet-500/15 text-violet-300' : 'bg-sky-500/15 text-sky-300'
+          CARD_META[txn.card].badgeClass
         }`}
       >
-        {txn.card === 'credit' ? 'Credit' : 'Debit'}
+        {CARD_META[txn.card].short}
       </span>
       <span className="w-16 shrink-0 text-xs text-slate-500">{txn.date}</span>
       <span className="min-w-0 flex-1 truncate text-sm text-slate-200" title={txn.merchantName}>

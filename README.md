@@ -9,7 +9,7 @@ Paste/upload a bank CSV export, step through each transaction assigning it to a 
 - **CSV import** — upload one or more `.csv` files at once (e.g. separate credit- and debit-card exports) or paste raw CSV text. Multiple files are merged into a single session; leading title/filter lines are skipped and the header row is auto-detected per file.
 - **Smart cleanup** — the noisy bank `Memo` field (dates, reference numbers, MCC codes, URLs) is cleaned into a readable merchant name.
 - **Learned auto-categorization** — once you categorize a merchant, Sift fuzzy-matches future transactions from the same merchant and pre-fills the category (works within the same file and across future imports).
-- **Card-aware** — each file is tagged as a **Debit Card** or **Credit Card** import based on its CSV format (the credit-card export has extra `Fees`/`Principal`/`Interest` columns). Learned merchant→category mappings are scoped per card, so the same merchant can map to different categories on different cards.
+- **Card-aware** — each file is tagged as a **Debit Card**, **Credit Card**, or **Chase Sapphire** import based on its CSV format (the credit-card export has extra `Fees`/`Principal`/`Interest` columns; the Chase export has its own layout — see below). Learned merchant→category mappings are scoped per card, so the same merchant can map to different categories on different cards.
 - **Auto-skip known transactions** — on import (and after each assignment), Sift jumps straight to the next transaction that still needs a category; already-known ones are skipped. Use ← / → to step back through them if you want to review or override.
 - **Editable categories** — add, rename, recolor, and delete categories on the fly.
 - **Live running totals** — per-category spend updates as you go.
@@ -31,6 +31,19 @@ Columns are matched **by header name**, so exports with extra trailing columns w
 
 - **Memo** holds the real merchant info and is used for display + matching.
 - **Amount Debit** is spending (negative); **Amount Credit** is deposits/refunds. Each row uses one column. `Fees` / `Principal` / `Interest` values are ignored (only their column presence matters, for card detection).
+
+### Chase Sapphire format
+
+```
+Transaction Date,Post Date,Description,Category,Type,Amount,Memo
+```
+
+Detected by the `Transaction Date` + `Description` + `Amount` columns and tagged as **Chase Sapphire**.
+
+- **Description** holds the merchant and is used for display + matching; **Transaction Date** is used as the date.
+- **Amount** is a single signed column: negative = purchase (spending), positive = payment/refund.
+- Rows with `Type` = `Payment` (e.g. "Payment Thank You - Web") are automatically marked **Ignored**.
+- Chase's own `Category` column, `Post Date`, and `Memo` are ignored.
 
 ## Tech stack
 

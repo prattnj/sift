@@ -56,6 +56,7 @@ export default function App() {
     (txns: Transaction[], name: string) => {
       // Apply learned auto-suggestions up front (scoped per card).
       const suggested = txns.map((t) => {
+        if (t.categoryId) return t // pre-categorized by the parser (e.g. auto-ignored payments)
         const match = findBestMatch(t.card, t.merchantKey, mappings)
         return match ? { ...t, categoryId: match.categoryId, autoSuggested: true } : t
       })

@@ -1,7 +1,7 @@
 export type TxnType = 'debit' | 'credit'
 
 /** Which physical card/account a file came from — derived from the CSV format. */
-export type CardType = 'debit' | 'credit'
+export type CardType = 'debit' | 'credit' | 'chase'
 
 export interface Transaction {
   id: string

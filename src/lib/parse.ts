@@ -1,5 +1,6 @@
 import type { CardType, Transaction } from '../types'
 import { cleanMerchantName, merchantKey } from './normalize'
+import { IGNORED_CATEGORY_ID } from './storage'
 
 /** Parse a single CSV line into fields, honoring double-quoted fields with embedded commas. */
 function parseCsvLine(line: string): string[] {
@@ -85,6 +86,32 @@ function parseAmount(raw: string): number {
   return Number.isFinite(n) ? n : NaN
 }
 
+/**
+ * Chase credit-card export:
+ * Transaction Date,Post Date,Description,Category,Type,Amount,Memo
+ * A single signed Amount column (negative = purchase, positive = payment/refund);
+ * the merchant lives in Description. Chase's own Category column is ignored.
+ */
+interface ChaseHeaderMap {
+  date: number
+  description: number
+  amount: number
+  type: number | undefined
+}
+
+function tryBuildChaseHeaderMap(fields: string[]): ChaseHeaderMap | null {
+  const norm = fields.map((f) => f.toLowerCase().trim())
+  const idx = (name: string) => {
+    const i = norm.indexOf(name)
+    return i === -1 ? undefined : i
+  }
+  const date = idx('transaction date')
+  const description = idx('description')
+  const amount = idx('amount')
+  if (date === undefined || description === undefined || amount === undefined) return null
+  return { date, description, amount, type: idx('type') }
+}
+
 export interface ParseResult {
   transactions: Transaction[]
   skippedLines: number
@@ -97,14 +124,58 @@ function nextId(): string {
   return `txn_${Date.now().toString(36)}_${idCounter}`
 }
 
+function parseChaseRow(
+  fields: string[],
+  header: ChaseHeaderMap,
+  lineNo: number,
+  errors: string[],
+): Transaction | null {
+  const get = (idx: number | undefined) => (idx === undefined ? '' : (fields[idx] ?? '').trim())
+  const date = get(header.date)
+  const merchant = get(header.description)
+  const amountRaw = get(header.amount)
+  const chaseType = get(header.type)
+
+  if (!amountRaw) {
+    if (merchant || date) errors.push(`Line ${lineNo}: no amount found, skipped.`)
+    return null
+  }
+  const signed = parseAmount(amountRaw)
+  if (Number.isNaN(signed)) {
+    errors.push(`Line ${lineNo}: unparseable amount, skipped.`)
+    return null
+  }
+
+  const isPayment = chaseType.toLowerCase() === 'payment'
+  return {
+    id: nextId(),
+    transactionNumber: '',
+    date,
+    description: chaseType,
+    memo: merchant,
+    merchantName: cleanMerchantName(merchant),
+    merchantKey: merchantKey(merchant),
+    amount: Math.abs(signed),
+    type: signed < 0 ? 'debit' : 'credit',
+    card: 'chase',
+    balance: null,
+    checkNumber: '',
+    // Card payments are just money moving between accounts — auto-ignore them.
+    categoryId: isPayment ? IGNORED_CATEGORY_ID : null,
+    autoSuggested: isPayment,
+  }
+}
+
 /**
  * Parse a full bank CSV export. Skips leading title/filter lines until the header
- * row is detected, then reads transactions. Debits and credits live in separate columns.
+ * row is detected, then reads transactions. Supports the bank's debit/credit export
+ * (separate debit and credit columns) and the Chase export (single signed amount).
  */
 export function parseCsv(text: string): ParseResult {
   const rawLines = text.split(/\r\n|\n|\r/)
   const errors: string[] = []
   let header: HeaderMap | null = null
+  let chaseHeader: ChaseHeaderMap | null = null
   let skippedLines = 0
   const transactions: Transaction[] = []
 
@@ -113,12 +184,19 @@ export function parseCsv(text: string): ParseResult {
     if (line.trim() === '') continue
     const fields = parseCsvLine(line)
 
+    if (chaseHeader) {
+      const txn = parseChaseRow(fields, chaseHeader, i + 1, errors)
+      if (txn) transactions.push(txn)
+      continue
+    }
+
     if (!header) {
       const maybe = tryBuildHeaderMap(fields)
       if (maybe) {
         header = maybe
       } else {
-        skippedLines++
+        chaseHeader = tryBuildChaseHeaderMap(fields)
+        if (!chaseHeader) skippedLines++
       }
       continue
     }
@@ -172,8 +250,10 @@ export function parseCsv(text: string): ParseResult {
     })
   }
 
-  if (!header) {
-    errors.push('Could not find a header row. Expected columns like "Date", "Memo", "Amount Debit", "Amount Credit".')
+  if (!header && !chaseHeader) {
+    errors.push(
+      'Could not find a header row. Expected columns like "Date", "Memo", "Amount Debit", "Amount Credit" (bank) or "Transaction Date", "Description", "Amount" (Chase).',
+    )
   }
 
   return { transactions, skippedLines, errors }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Category, Transaction } from '../types'
 import { fmtUSD } from '../lib/format'
+import { CARD_META } from '../lib/cards'
 import { IGNORED_CATEGORY, IGNORED_CATEGORY_ID } from '../lib/storage'
 
 interface Props {
@@ -294,12 +295,10 @@ function TransactionCard({ current, category }: { current: Transaction; category
           <div className="flex items-center gap-2">
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                current.card === 'credit'
-                  ? 'bg-violet-500/15 text-violet-300'
-                  : 'bg-sky-500/15 text-sky-300'
+                CARD_META[current.card].badgeClass
               }`}
             >
-              {current.card === 'credit' ? 'Credit Card' : 'Debit Card'}
+              {CARD_META[current.card].label}
             </span>
             <span className="text-xs text-slate-500">{current.date}</span>
             {current.autoSuggested && current.categoryId && (
